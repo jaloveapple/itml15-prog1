@@ -1,6 +1,7 @@
 package itml.agents;
 
 import itml.cards.Card;
+import itml.cards.CardDefend;
 import itml.cards.CardRest;
 import itml.simulator.CardDeck;
 import itml.simulator.StateAgent;
@@ -18,11 +19,11 @@ import java.util.ArrayList;
 
 
 /**
- *  This class ...
+ *  This agent will demolish it's opponents. Not even the chosen one (Neo), can stand up to it.
  *
  *  @authors        Arnar Freyr Bjarnason
  *                  Kjartan Valur Kjartansson
- *                  *insert name*
+ *                  Jón Gísli Björgvinsson
  */
 public class MyAgent extends Agent{
     private int m_noThisAgent;     // Index of our agent (0 or 1).
@@ -163,7 +164,7 @@ public class MyAgent extends Agent{
     private double score ( StateBattle stateBattle ){
         StateAgent agent = stateBattle.getAgentState(m_noThisAgent);
         StateAgent oAgent = stateBattle.getAgentState(m_noOpponentAgent);
-        
+
 
 
         double turns, oturns;
@@ -182,6 +183,18 @@ public class MyAgent extends Agent{
      */
 
     private Card getMove( StateBattle stateBattle, Card oCard){
+        StateAgent agent = stateBattle.getAgentState(m_noThisAgent);
+        StateAgent oagent = stateBattle.getAgentState(m_noOpponentAgent);
+
+        // Agent is exhausted
+        if(agent.getStaminaPoints() == 0) return new CardRest();
+
+        // Other agent is defending
+        if(oCard.getName().equals("cDefend")) return new CardRest();
+
+
+
+
         return new CardRest();
     }
 
