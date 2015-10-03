@@ -17,7 +17,7 @@ import java.util.ArrayList;
  *  This class ...
  *
  *  @authors        Arnar Freyr Bjarnason
- *                  *insert name*
+ *                  Kjartan Valur Kjartansson
  *                  *insert name*
  */
 public class MyAgent extends Agent{
@@ -25,10 +25,12 @@ public class MyAgent extends Agent{
     private int m_noOpponentAgent; // Index of opponent's agent.
     private Classifier classifier_;
     private Instances dataset;
+    boolean learned;
 
     public MyAgent ( CardDeck deck, int msConstruct, int msPerMove, int msLearn){
         super(deck, msConstruct, msPerMove, msLearn);
         classifier_ = new J48();
+        learned = false;
     }
 
     @Override
@@ -74,6 +76,7 @@ public class MyAgent extends Agent{
 
     @Override
     public Classifier learn( Instances instances ){
+        learned = true;
         dataset = instances;
         try {
             classifier_.buildClassifier(instances);
