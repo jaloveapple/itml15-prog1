@@ -1,11 +1,16 @@
 package itml.agents;
 
 import itml.cards.Card;
+import itml.cards.CardRest;
 import itml.simulator.CardDeck;
+import itml.simulator.StateAgent;
 import itml.simulator.StateBattle;
 import weka.classifiers.Classifier;
 import weka.classifiers.trees.J48;
+import weka.core.Instance;
 import weka.core.Instances;
+
+import java.util.ArrayList;
 
 
 /**
@@ -40,7 +45,31 @@ public class MyAgent extends Agent{
 
     @Override
     public Card act( StateBattle stateBattle ){
-        return null;
+        double[] values = new double[8];
+        StateAgent a = stateBattle.getAgentState(0);
+        StateAgent o = stateBattle.getAgentState(1);
+        values[0] = a.getCol();
+        values[1] = a.getRow();
+        values[2] = a.getHealthPoints();
+        values[3] = a.getStaminaPoints();
+        values[4] = o.getCol();
+        values[5] = o.getRow();
+        values[6] = o.getHealthPoints();
+        values[7] = o.getStaminaPoints();
+        try {
+            ArrayList<Card> allCards = m_deck.getCards();
+            ArrayList<Card> cards = m_deck.getCards(a.getStaminaPoints());
+            Instance i = new Instance(1.0, values.clone());
+            i.setDataset(dataset);
+            int out = (int)classifier_.classifyInstance(i);
+            Card selected = allCards.get(out);
+            if(cards.contains(selected)) {
+                return selected;
+            }
+        } catch (Exception e) {
+            System.out.println("Error classifying new instance: " + e.toString());
+        }
+        return new CardRest();  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     @Override
@@ -52,5 +81,13 @@ public class MyAgent extends Agent{
             System.out.println("Error training classifier: " + e.toString());
         }
         return null;
+    }
+
+    private int calcDistanceBetweenAgents( StateBattle bs ) {
+
+        StateAgent asFirst = bs.getAgentState( 0 );
+        StateAgent asSecond = bs.getAgentState( 1 );
+
+        return Math.abs( asFirst.getCol() - asSecond.getCol() ) + Math.abs( asFirst.getRow() - asSecond.getRow() );
     }
 }

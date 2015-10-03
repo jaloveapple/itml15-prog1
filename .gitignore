@@ -2,3 +2,4 @@ out/*
 *.class
 *.pdf
 history.arff
+.idea/*
