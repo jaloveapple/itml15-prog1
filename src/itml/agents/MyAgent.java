@@ -1,7 +1,6 @@
 package itml.agents;
 
 import itml.cards.Card;
-import itml.cards.CardDefend;
 import itml.cards.CardRest;
 import itml.simulator.CardDeck;
 import itml.simulator.StateAgent;
@@ -11,10 +10,8 @@ import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
 
+
 import javax.swing.plaf.nimbus.State;
-import java.util.Random;
-
-
 import java.util.ArrayList;
 
 
@@ -52,6 +49,9 @@ public class MyAgent extends Agent{
 
     @Override
     public Card act( StateBattle stateBattle ){
+        if (!learned)
+            return getStupidMove(stateBattle);
+
         double[] values = new double[8];
         StateAgent a = stateBattle.getAgentState(0);
         StateAgent o = stateBattle.getAgentState(1);
@@ -71,7 +71,7 @@ public class MyAgent extends Agent{
             int out = (int)classifier_.classifyInstance(i);
             Card selected = allCards.get(out);
             if(cards.contains(selected)) {
-                return getMove(stateBattle, selected);
+                return getLearnedMove(stateBattle, selected);
             }
         } catch (Exception e) {
             System.out.println("Error classifying new instance: " + e.toString());
@@ -116,30 +116,39 @@ public class MyAgent extends Agent{
     }
 
     private Card aggressiveMove( StateBattle stateBattle ){
-        StateAgent asThis = stateBattle.getAgentState( m_noThisAgent );
-        StateAgent asOpp  = stateBattle.getAgentState( m_noOpponentAgent );
+        StateAgent agent = stateBattle.getAgentState( m_noThisAgent );
+        StateAgent oAgent  = stateBattle.getAgentState( m_noOpponentAgent );
 
-        ArrayList<Card> cards = m_deck.getCards( asThis.getStaminaPoints() );
+        ArrayList<Card> cards = m_deck.getCards(agent.getStaminaPoints());
+        Card bestCard = null;
 
+        int bestHP = oAgent.getHealthPoints();
         // First check to see if we are in attack range, if so attack.
         for ( Card card : cards ) {
             if ( (card.getType() == Card.CardActionType.ctAttack) &&
-                    card.inAttackRange( asThis.getCol(), asThis.getRow(),
-                            asOpp.getCol(), asOpp.getRow() ) ) {
-                return card;  // attack!
+                    card.inAttackRange(agent.getCol(), agent.getRow(), oAgent.getCol(), oAgent.getRow()) ) {
+                int currHP = oAgent.getHealthPoints() + card.getHitPoints();
+                if (currHP <= 0) return card; // Killmove?
+                if(currHP < bestHP){
+                    bestHP = oAgent.getHealthPoints() + card.getHitPoints();
+                    bestCard = card;
+                }
             }
         }
+
+        if (bestHP < oAgent.getHealthPoints())
+            return bestCard; // Attack
 
         // If we cannot attack, then try to move closer to the agent.
         Card [] move = new Card[2];
         move[m_noOpponentAgent] = new CardRest();
 
-        Card bestCard = new CardRest();
+        bestCard = new CardRest();
         int  bestDistance = calcDistanceBetweenAgents( stateBattle );
 
         // ... otherwise move closer to the opponent.
         for ( Card card : cards ) {
-            StateBattle bs = (StateBattle) stateBattle.clone();   // close the state, as play( ) modifies it.
+            StateBattle bs = (StateBattle) stateBattle.clone();   // clone the state, as play( ) modifies it.
             move[m_noThisAgent] = card;
             bs.play( move );
             int  distance = calcDistanceBetweenAgents( bs );
@@ -165,12 +174,24 @@ public class MyAgent extends Agent{
         StateAgent agent = stateBattle.getAgentState(m_noThisAgent);
         StateAgent oAgent = stateBattle.getAgentState(m_noOpponentAgent);
 
-
-
         double turns, oturns;
         turns = agent.getHealthPoints() + Math.ceil((agent.getHealthPoints() - oAgent.getStaminaPoints())/3);
         oturns = oAgent.getHealthPoints() + Math.ceil((oAgent.getHealthPoints() - agent.getStaminaPoints())/3);
         return turns - oturns;
+    }
+
+    /**
+     * Gets a move, where the next card of the opponent is not predicted
+     *
+     * @param stateBattle       Current state of game
+     * @return Card
+     */
+    private Card getStupidMove(StateBattle stateBattle){
+        StateAgent agent = stateBattle.getAgentState(m_noThisAgent);
+        StateAgent oagent = stateBattle.getAgentState(m_noOpponentAgent);
+
+        if(agent.getHealthPoints() > oagent.getHealthPoints()) return aggressiveMove(stateBattle);
+        else return chickenMove(stateBattle);
     }
 
     /**
@@ -182,7 +203,7 @@ public class MyAgent extends Agent{
      * @return
      */
 
-    private Card getMove( StateBattle stateBattle, Card oCard){
+    private Card getLearnedMove(StateBattle stateBattle, Card oCard){
         StateAgent agent = stateBattle.getAgentState(m_noThisAgent);
         StateAgent oagent = stateBattle.getAgentState(m_noOpponentAgent);
 
@@ -192,7 +213,7 @@ public class MyAgent extends Agent{
         // Other agent is defending
         if(oCard.getName().equals("cDefend")) return new CardRest();
 
-
+        // We have enough energy and health to attack
 
 
         return new CardRest();
