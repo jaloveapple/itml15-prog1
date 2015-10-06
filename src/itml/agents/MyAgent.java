@@ -90,27 +90,36 @@ public class MyAgent extends Agent{
     /**
      * A function that returns the attack card with the highest damage available
      * @param stateBattle       Current state of game
+     * @param oCard             The predicted enemy card / null
      * @return attack card, null if none found
      */
-    private Card attack( StateBattle stateBattle){
-        StateAgent agent = stateBattle.getAgentState( m_noThisAgent );
-        StateAgent oAgent  = stateBattle.getAgentState(m_noOpponentAgent);
+    private Card attack( StateBattle stateBattle, Card oCard){
+        Card[] move = new Card[2];
+        if(learned) move[m_noOpponentAgent] = oCard;
+        else move[m_noOpponentAgent] = new CardRest();
 
-        ArrayList<Card> cards = m_deck.getCards(agent.getStaminaPoints());
         Card bestCard = null;
+        int bestSTAT = 0;
 
-        int bestHP = oAgent.getHealthPoints();
+        ArrayList<Card> cards = m_deck.getCards(stateBattle.getAgentState( m_noThisAgent ).getStaminaPoints());
         // Find attack cards
         for ( Card card : cards ) {
-            // In attack range?
-            if ( (card.getType() == Card.CardActionType.ctAttack) &&
-                    card.inAttackRange(agent.getCol(), agent.getRow(), oAgent.getCol(), oAgent.getRow()) ) {
-                int currHP = oAgent.getHealthPoints() - card.getHitPoints();
-                if (currHP <= 0) return card; // Killmove?
-                // Find strongest attack card
-                if(currHP < bestHP){
-                    bestHP = currHP;
-                    bestCard = card;
+            if ( card.getType() == Card.CardActionType.ctAttack) {
+
+                StateBattle bs = (StateBattle) stateBattle.clone();   // clone the state, as play( ) modifies it.
+                move[m_noThisAgent] = card;
+                bs.play( move );
+                StateAgent agent = bs.getAgentState( m_noThisAgent );
+                StateAgent oAgent  = bs.getAgentState(m_noOpponentAgent);
+
+                // In range?
+                if(card.inAttackRange(agent.getCol(), agent.getRow(), oAgent.getCol(), oAgent.getRow())) {
+                    if (oAgent.getHealthPoints() - card.getHitPoints() <= 0) return card; // Killing move?
+                    // Find strongest attack card
+                    if (card.getHitPoints() + card.getDefencePoints() > bestSTAT) {
+                        bestSTAT = card.getHitPoints() + card.getDefencePoints();
+                        bestCard = card;
+                    }
                 }
             }
         }
@@ -123,14 +132,14 @@ public class MyAgent extends Agent{
      *
      * @param stateBattle       Current state of the game
      * @param oCard             The predicted enemy card / null
-     * @return a card moving the agent away from the opponent
+     * @return a card moving the agent away from the opponent / null if none found
      */
-    private Card moveFurther (StateBattle stateBattle, Card oCard){
+    private Card moveAway(StateBattle stateBattle, Card oCard){
         Card [] move = new Card[2];
         if(learned) move[m_noOpponentAgent] = oCard;    // Predict where opponent moves
         else move[m_noOpponentAgent] = new CardRest();  // Assume opponent will remain still
 
-        Card bestCard = new CardRest();
+        Card bestCard = null;
         int  minDistance = calcDistanceBetweenAgents( stateBattle );
 
         ArrayList<Card> cards = m_deck.getCards( stateBattle.getAgentState( m_noThisAgent ).getStaminaPoints() );
@@ -153,14 +162,14 @@ public class MyAgent extends Agent{
      *
      * @param stateBattle       Current state of the game
      * @param oCard             The predicted enemy card / null
-     * @return a card moving agent closer to opponent
+     * @return a card moving agent closer to opponent / null if none found
      */
     private Card moveCloser( StateBattle stateBattle, Card oCard){
         Card [] move = new Card[2];
         if(learned) move[m_noOpponentAgent] = oCard;    // Predict where opponent moves
         else move[m_noOpponentAgent] = new CardRest();  // Assume opponent will remain still
 
-        Card bestCard = new CardRest();
+        Card bestCard = null;
         int  bestDistance = calcDistanceBetweenAgents( stateBattle );
 
         ArrayList<Card> cards = m_deck.getCards(stateBattle.getAgentState( m_noThisAgent ).getStaminaPoints());
@@ -179,6 +188,26 @@ public class MyAgent extends Agent{
     }
 
     /**
+     * Returns the card that gives the highest amount of defence points, with the maximum cost of "stamina"
+     * @param stamina       Maximum cost
+     * @return a defence card / null if none found
+     */
+    private Card defend(int stamina){
+        Card bestCard = null;
+        int bestDefence = 0;
+
+        ArrayList<Card> cards = m_deck.getCards(stamina);
+        // Find best defence card
+        for (Card card : cards ){
+            if(bestDefence < card.getDefencePoints()){
+                bestDefence = card.getDefencePoints();
+                bestCard = card;
+            }
+        }
+        return bestCard;
+    }
+
+    /**
      * Gets a move, where the next card of the opponent is not predicted
      *
      * @param stateBattle       Current state of game
@@ -190,21 +219,33 @@ public class MyAgent extends Agent{
 
         if(agent.getHealthPoints() >= oAgent.getHealthPoints()){
             Card c;
-            if((c = attack(stateBattle)) != null) return c;
-            else return moveCloser(stateBattle, null);
+            if((c = attack(stateBattle, null)) != null) return c;
+            else if((c = moveCloser(stateBattle, null)) != null) return c;
         }
         else{
-            return moveFurther(stateBattle, null);
+            Card c;
+            if((c = moveAway(stateBattle, null)) != null) return c;
         }
+        return new CardRest();
     }
 
     /**
-     * Get our next move, based on that the opponents move is oCard
+     * Gets a move, based on what is learned by using the classifier.
+     * Strategy:
+     *      Stamina = 0 : Rest
+     *      Enemy is defending: see if we have plenty of stamina, then if we
+     *          can penetrate his defense
+     *      Enemy is moving (or healing): If we have more HP we are likely in a better standing,
+     *          so we use our heaviest attack or chase him if he moves out of range
+     *      Enemy is attacking: We try to block the attack, if it wastes more of his stamina, and completely
+     *          blocks the attack. Or we try to counterattack if we can at least match his power. Or we try to
+     *          dodge his attack by moving away from it.
+     *      We throw our heaviest punch, or rest (if out of stamina, or he is out of range)
      *
      * @param stateBattle       Current state of game
      * @param oCard             Predicted opponent move
      *
-     * @return
+     * @return the move performed by the agent
      */
 
     private Card getLearnedMove(StateBattle stateBattle, Card oCard){
@@ -213,17 +254,50 @@ public class MyAgent extends Agent{
         //System.out.println("HP: " + agent.getHealthPoints() + ", EHP: " + oAgent.getHealthPoints());
         //System.out.println("PREDICTED: " + oCard.getName());
 
-        // Agent is exhausted
+        // Agent is exhausted, it needs to rest
         if(agent.getStaminaPoints() == 0) return new CardRest();
 
-        // Other agent is defending
-        if(oCard.getName().equals("cDefend")) return new CardRest();
+        Card attCard = attack(stateBattle, oCard);
+        Card defense = defend(oCard.getStaminaPoints());
 
-        Card c = getStupidMove(stateBattle);
-        //System.out.println(c.getName());
+        // Other agent is defending, rest up! (or attack if worth it)
+        if(oCard.getType() == Card.CardActionType.ctDefend){
+            if(agent.getStaminaPoints() + (new CardRest()).getStaminaPoints() > StateAgent.MAX_STAMINA)
+                if(attCard.getHitPoints() > defense.getDefencePoints())
+                    return attCard;     // Attack if plenty of stamina, and it penetrates the defence
+            return new CardRest();      // Rest up
+        }
 
-        // We have enough energy and health to attack
-        return c;
+        Card mvcCard = moveCloser(stateBattle, oCard);  // Move closer card
+        Card mvfCard = moveAway(stateBattle, oCard); // Move away card
+
+        // Other agent is moving (or resting)
+        if(oCard.getType() == Card.CardActionType.ctMove){
+            // Do we have the upper hand
+            if(agent.getHealthPoints() >= oAgent.getHealthPoints()){
+                // Then chase, go for the neck!
+                if(attCard != null) return attCard;         // Attack if possible
+                else if (mvcCard != null) return mvcCard;   // Chase if possible
+            }
+            else{
+                // Then lets go for the tie
+                if(mvfCard != null) return mvfCard;         // Run if possible
+            }
+        }
+        // Other agent is attacking
+        if(oCard.getType() == Card.CardActionType.ctAttack){
+            // Can we make the attack a waste?
+            if(defense != null &&
+                    oCard.getHitPoints() - defense.getDefencePoints() >= 0 &&
+                    oCard.getStaminaPoints() > defense.getStaminaPoints()) return defense;
+            // Can we equal the damage dealt (or do more)?
+            else if(attCard != null && oCard.getHitPoints() <= attCard.getHitPoints())return attCard;
+            // Lets try and dodge the attack by moving away
+            return mvfCard;
+        }
+
+        // Didn't find any match move according to the tactic, lets attack if possible, otherwise rest
+        return (attCard != null) ? attCard : new CardRest();
     }
 
     private int calcDistanceBetweenAgents( StateBattle stateBattle ) {

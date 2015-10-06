@@ -37,12 +37,13 @@ public class BattleSim {
         // Default arguments.
         int numStepsInGame   = 30;     // Maximum step length of a game.
         int numTrainingGames = 10;     // Number of games to play in the training phase.
-        int numPlayingGames  = 100;    // Number of games to play in the evaluation phase.
+        int numPlayingGames  = 1000;    // Number of games to play in the evaluation phase.
         int msConstruct      = 5000;   // Maximum time to use in Agent constructor (in ms.)
         int msPerMove        = 50;     // Maximum time to use per act, startGame, endGame call.
         int msLearning       = 30000;  // Maximum time to use in the learning call.
 
         // Check if any command line arguments
+
         if (args.length > 0) {
             if ( args.length == 6 ) {
                 try {
@@ -58,7 +59,7 @@ public class BattleSim {
                 }
             }
         }
-        
+
         // Set up the deck of cards.
         CardDeck deck = new CardDeck();
         deck.addCard( new CardRest() );
@@ -72,6 +73,7 @@ public class BattleSim {
         deck.addCard( new CardAttackCardinal() );
         deck.addCard( new CardAttackDiagonal() );
         deck.addCard( new CardAttackLong() );
+        deck.addCard( new CardAttackzDestroy());
 
         // Set up the initial state of the agent (location, health- and stamina-points),
         // and create a battle arena (5 x 5).

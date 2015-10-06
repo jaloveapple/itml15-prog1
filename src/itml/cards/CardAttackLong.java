@@ -18,6 +18,6 @@ public class CardAttackLong extends Card {
     private static Coordinate[] cardinalLongline = { coO, coE, coW, coE2, coW2 };
 
     public CardAttackLong() {
-        super( "cAttackLong", Card.CardActionType.ctAttack, 0, 0,-2, 1, 0, cardinalLongline );
+        super( "cAttackLong", Card.CardActionType.ctAttack, 0, 0,-2, 0, 0, cardinalLongline );
     }
 }

@@ -12,6 +12,6 @@ package itml.cards;
 public class CardDefend extends Card {
 
     public CardDefend() {
-        super( "cDefend", Card.CardActionType.ctDefend, 0, 0, -2, 0, 2, null );
+        super( "cDefend", Card.CardActionType.ctDefend, 0, 0, -1, 0, 2, null );
     }
 }
