@@ -260,7 +260,7 @@ public class MyAgent2 extends Agent{
         		bestCard = c;
         	}
         }
-        System.out.println(bestCard.getName());
+        
     	return bestCard;
     }
 
