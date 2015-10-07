@@ -1,16 +1,6 @@
 package itml.agents;
 
 import itml.cards.Card;
-import itml.cards.CardAttackCardinal;
-import itml.cards.CardAttackDiagonal;
-import itml.cards.CardAttackLong;
-import itml.cards.CardDefend;
-import itml.cards.CardLeapLeft;
-import itml.cards.CardLeapRight;
-import itml.cards.CardMoveDown;
-import itml.cards.CardMoveLeft;
-import itml.cards.CardMoveRight;
-import itml.cards.CardMoveUp;
 import itml.cards.CardRest;
 import itml.simulator.CardDeck;
 import itml.simulator.StateAgent;
@@ -28,16 +18,16 @@ import java.util.ArrayList;
  *
  *  @authors        Arnar Freyr Bjarnason
  *                  Kjartan Valur Kjartansson
- *                  *insert name*
+ *                  JÛn GÌsli Bˆjrgvinsson
  */
-public class MyAgent extends Agent{
+public class MyAgent2 extends Agent{
     private int m_noThisAgent;     // Index of our agent (0 or 1).
     private int m_noOpponentAgent; // Index of opponent's agent.
     private Classifier classifier_;
     private Instances dataset;
     boolean learned;
 
-    public MyAgent ( CardDeck deck, int msConstruct, int msPerMove, int msLearn){
+    public MyAgent2 ( CardDeck deck, int msConstruct, int msPerMove, int msLearn){
         super(deck, msConstruct, msPerMove, msLearn);
         classifier_ = new J48();
         learned = false;
@@ -47,35 +37,139 @@ public class MyAgent extends Agent{
     public void startGame( int noThisAgent, StateBattle stateBattle ){
         m_noThisAgent = noThisAgent;
         m_noOpponentAgent = (noThisAgent == 0) ? 1 : 0;
-
     }
 
     @Override
     public void endGame( StateBattle stateBattle, double [] results ){
 
     }
-    
 
     
-    public double calcPoints(StateBattle sb)
-    {
-    	StateAgent a = sb.getAgentState(m_noThisAgent);
-    	StateAgent o = sb.getAgentState(m_noOpponentAgent);
-    	int dist = calcDistanceBetweenAgents(sb);
-    	
-    	return ((a.getHealthPoints()/o.getHealthPoints())
-    			* (a.getStaminaPoints()/o.getStaminaPoints()));	
+    /**
+     * Gets a move, where the next card of the opponent is not predicted
+     *
+     * @param stateBattle       Current state of game
+     * @return card with no prediction
+     */
+    private Card getStupidMove(StateBattle stateBattle){
+        StateAgent agent = stateBattle.getAgentState(m_noThisAgent);
+        StateAgent oAgent = stateBattle.getAgentState(m_noOpponentAgent);
+
+        if(agent.getHealthPoints() >= oAgent.getHealthPoints()){
+            Card c;
+            if((c = attack(stateBattle, null)) != null) return c;
+            else if((c = moveCloser(stateBattle, null)) != null) return c;
+        }
+        else{
+            Card c;
+            if((c = moveAway(stateBattle, null)) != null) return c;
+        }
+        return new CardRest();
+    }
+    
+    /**
+     * Will return the card that brings the agent as far from the opponent as possible
+     *
+     * @param stateBattle       Current state of the game
+     * @param oCard             The predicted enemy card / null
+     * @return a card moving the agent away from the opponent / null if none found
+     */
+    private Card moveAway(StateBattle stateBattle, Card oCard){
+        Card [] move = new Card[2];
+        if(learned) move[m_noOpponentAgent] = oCard;    // Predict where opponent moves
+        else move[m_noOpponentAgent] = new CardRest();  // Assume opponent will remain still
+
+        Card bestCard = null;
+        int  minDistance = calcDistanceBetweenAgents( stateBattle );
+
+        ArrayList<Card> cards = m_deck.getCards( stateBattle.getAgentState( m_noThisAgent ).getStaminaPoints() );
+        // Move further from opponent
+        for ( Card card : cards ) {
+            StateBattle bs = (StateBattle) stateBattle.clone();   // clone the state, as play( ) modifies it.
+            move[m_noThisAgent] = card;
+            bs.play( move );
+            int  distance = calcDistanceBetweenAgents( bs );
+            if ( distance > minDistance ) {
+                bestCard = card;
+                minDistance = distance;
+            }
+        }
+        return bestCard;
     }
 
+    /**
+     * Will return a card that brings the agent as close to the opponent as possible
+     *
+     * @param stateBattle       Current state of the game
+     * @param oCard             The predicted enemy card / null
+     * @return a card moving agent closer to opponent / null if none found
+     */
+    private Card moveCloser( StateBattle stateBattle, Card oCard){
+        Card [] move = new Card[2];
+        if(learned) move[m_noOpponentAgent] = oCard;    // Predict where opponent moves
+        else move[m_noOpponentAgent] = new CardRest();  // Assume opponent will remain still
 
+        Card bestCard = null;
+        int  bestDistance = calcDistanceBetweenAgents( stateBattle );
+
+        ArrayList<Card> cards = m_deck.getCards(stateBattle.getAgentState( m_noThisAgent ).getStaminaPoints());
+        // Move closer to the opponent.
+        for ( Card card : cards ) {
+            StateBattle bs = (StateBattle) stateBattle.clone();   // clone the state, as play( ) modifies it.
+            move[m_noThisAgent] = card;
+            bs.play( move );
+            int  distance = calcDistanceBetweenAgents( bs );
+            if ( distance < bestDistance ) {
+                bestCard = card;
+                bestDistance = distance;
+            }
+        }
+        return bestCard;
+    }
+    
+    private Card attack( StateBattle stateBattle, Card oCard){
+        Card[] move = new Card[2];
+        if(learned) move[m_noOpponentAgent] = oCard;
+        else move[m_noOpponentAgent] = new CardRest();
+
+        Card bestCard = null;
+        int bestSTAT = 0;
+
+        ArrayList<Card> cards = m_deck.getCards(stateBattle.getAgentState( m_noThisAgent ).getStaminaPoints());
+        // Find attack cards
+        for ( Card card : cards ) {
+            if ( card.getType() == Card.CardActionType.ctAttack) {
+
+                StateBattle bs = (StateBattle) stateBattle.clone();   // clone the state, as play( ) modifies it.
+                move[m_noThisAgent] = card;
+                bs.play( move );
+                StateAgent agent = bs.getAgentState( m_noThisAgent );
+                StateAgent oAgent  = bs.getAgentState(m_noOpponentAgent);
+
+                // In range?
+                if(card.inAttackRange(agent.getCol(), agent.getRow(), oAgent.getCol(), oAgent.getRow())) {
+                    if (oAgent.getHealthPoints() - card.getHitPoints() <= 0) return card; // Killing move?
+                    // Find strongest attack card
+                    if (card.getHitPoints() + card.getDefencePoints() > bestSTAT) {
+                        bestSTAT = card.getHitPoints() + card.getDefencePoints();
+                        bestCard = card;
+                    }
+                }
+            }
+        }
+
+        return bestCard;
+    }
+    
     @Override
     public Card act( StateBattle stateBattle ){
-    	
-//    	System.out.println("ACTING.");
-    	
-    	double[] values = new double[8];
-        StateAgent a = stateBattle.getAgentState(m_noThisAgent);
-        StateAgent o = stateBattle.getAgentState(m_noOpponentAgent);
+    	if (!learned)
+    	{
+    		return getStupidMove(stateBattle);
+    	}
+        double[] values = new double[8];
+        StateAgent a = stateBattle.getAgentState(0);
+        StateAgent o = stateBattle.getAgentState(1);
         values[0] = a.getCol();
         values[1] = a.getRow();
         values[2] = a.getHealthPoints();
@@ -86,48 +180,14 @@ public class MyAgent extends Agent{
         values[7] = o.getStaminaPoints();
         try {
             ArrayList<Card> allCards = m_deck.getCards();
-            ArrayList<Card> o_cards = m_deck.getCards(o.getStaminaPoints());
-            ArrayList<Card> a_cards = m_deck.getCards(a.getStaminaPoints());
-            
-            
+            ArrayList<Card> cards = m_deck.getCards(a.getStaminaPoints());
             Instance i = new Instance(1.0, values.clone());
             i.setDataset(dataset);
             int out = (int)classifier_.classifyInstance(i);
             Card selected = allCards.get(out);
-            
-            //our prediction is wrong. What to do?
-            if (!o_cards.contains(selected))
-	            return null;
-            
-//            System.out.println("VALID PREDICTION");
-            
-            Card[] move = new Card[2];
-            move[m_noOpponentAgent] = selected;
-            
-            double bestScore = Integer.MIN_VALUE;
-            Card bestCard = null;
-            for (int x = 0; x < a_cards.size(); x++)
-            {
-//            	System.out.println("TRYING ACTION: " + x);
-            	
-            	StateBattle sbClone = (StateBattle)stateBattle.clone();
-            	
-            	move[m_noThisAgent] = a_cards.get(x);
-            	sbClone.play(move);
-            	double score = calcPoints(sbClone);
-            	if (score > bestScore)
-            	{
-            		bestScore = score;
-            		bestCard = a_cards.get(x);
-            	}
-            	
+            if(cards.contains(selected)) {
+                return getMove(stateBattle, selected);
             }
-            
-            System.out.println("OPPONENT'S CARD: " + selected.getName());
-            System.out.println("RETURNING CARD: " + bestCard.getName());
-            return bestCard;
-            
-            
         } catch (Exception e) {
             System.out.println("Error classifying new instance: " + e.toString());
         }
@@ -138,6 +198,7 @@ public class MyAgent extends Agent{
     public Classifier learn( Instances instances ){
         learned = true;
         dataset = instances;
+        dataset.setClassIndex(8);
         try {
             classifier_.buildClassifier(instances);
         } catch (Exception e){
@@ -146,11 +207,88 @@ public class MyAgent extends Agent{
         return null;
     }
 
-    private int calcDistanceBetweenAgents( StateBattle bs ) {
+    /**
+     * Get our next move, based on that the opponents move is oCard
+     *
+     * @param stateBattle       Current state of game
+     * @param oCard             Predicted opponent move
+     *
+     * @return
+     */
 
-        StateAgent asFirst = bs.getAgentState( 0 );
-        StateAgent asSecond = bs.getAgentState( 1 );
+    private Card getMove( StateBattle stateBattle, Card oCard){
+        StateAgent a = stateBattle.getAgentState(m_noThisAgent);
+        StateAgent o = stateBattle.getAgentState(m_noOpponentAgent);
+        ArrayList<Card> allCards = m_deck.getCards();
+        ArrayList<Card> cards = m_deck.getCards(a.getStaminaPoints());
+        Card[] plays = new Card[2];
+        if(a.getStaminaPoints() == 0 
+        		|| (a.getStaminaPoints() < 3 
+        				&& calcDistanceBetweenAgents(stateBattle) > 2)) {
+        	return new CardRest();
+        }
+        if (a.getHealthPoints() >= o.getHealthPoints() 
+        		&& a.getStaminaPoints() > 0
+        		&& calcDistanceBetweenAgents(stateBattle) > 1)
+        	return moveCloser(stateBattle, oCard);
+        
+        Card bestCard = new CardRest();
+        double bestScore = -1000;
+        for(Card c : cards) {
+        	if (c.getName().equals("cRest"))
+        		continue;
+        	if (c.getName().equals("cMoveLeft") && a.getCol() == 0)
+        		continue;
+        	if (c.getName().equals("cLeapLeft") && (a.getCol() == 0 || a.getCol() == 1))
+        		continue;
+        	if (c.getName().equals("cMoveRight") && a.getCol() == stateBattle.getNumColumns()-1)
+        		continue;
+        	if (c.getName().equals("cLeapRight") && (a.getCol() == stateBattle.getNumColumns()-2) || a.getCol() == stateBattle.getNumColumns()-1)
+        		continue;
+        	if (c.getName().equals("cMoveDown") && a.getRow() == 0)
+        		continue;
+        	if (c.getName().equals("cMoveUp") && a.getRow() == stateBattle.getNumRows() - 1)
+        		continue;
+        	
+        	StateBattle cloneState = (StateBattle)stateBattle.clone();
+        	plays[m_noThisAgent] = c;
+        	plays[m_noOpponentAgent] = oCard;
+        	cloneState.play(plays);
+        	double score = stateScore(cloneState);
+        	if(score > bestScore) {
+        		bestScore = score;
+        		bestCard = c;
+        	}
+        }
+        System.out.println(bestCard.getName());
+    	return bestCard;
+    }
+
+    private int calcDistanceBetweenAgents( StateBattle stateBattle ) {
+
+        StateAgent asFirst = stateBattle.getAgentState( 0 );
+        StateAgent asSecond = stateBattle.getAgentState( 1 );
 
         return Math.abs( asFirst.getCol() - asSecond.getCol() ) + Math.abs( asFirst.getRow() - asSecond.getRow() );
+    }
+    
+    /**
+     * Calculates a desirability score for a given state based on agents' health and 
+     * stamina. Consider adding a factor based on distance between agents.
+     * 
+     * @param stateBattle
+     * @return
+     */
+    private double stateScore( StateBattle stateBattle) {
+    	StateAgent ourState = stateBattle.getAgentState(m_noThisAgent);
+    	StateAgent enemyState = stateBattle.getAgentState(m_noOpponentAgent);
+    	double dist = calcDistanceBetweenAgents(stateBattle);
+    	if (ourState.getHealthPoints() < enemyState.getHealthPoints())
+    		dist = -dist;
+    	
+    	
+    	return (double)ourState.getHealthPoints()*50 + (double)ourState.getStaminaPoints()
+    			- (double)enemyState.getHealthPoints()*50 - (double)enemyState.getStaminaPoints()
+    			+ dist*5;    	
     }
 }
